@@ -1,0 +1,187 @@
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+body {
+  background-color: #222222; /* Dark navy blue background for the entire page */
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  color: white;
+}
+
+/* CSS for UserList */
+.UserList {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 20px;
+  padding: 20px;
+}
+
+/* CSS for User Boxes */
+.box {
+  background-color: #302e6e;
+  border: 5px solid #ffffff;
+  padding: 10px;
+  margin: 10px;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+  width: 100px;
+
+  /* Center text */
+  text-align: center;
+}
+
+.box h3 {
+  font-size: 1.2rem;
+  margin: 0;
+  color: #ffffff;
+}
+
+.box p {
+  font-size: 1rem;
+  color: #ffffff;
+  margin: 5px 0;
+}
+
+/* Hover effect */
+.box:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  background-color: #6d50ff;
+}
+
+/* Updated CSS for the Chat Area */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 20px;
+  padding: 20px;
+  flex: 1; /* Takes up 1/3 of the available space */
+  width: 30vw;
+  max-width: 30vw;
+}
+
+.chat-log {
+  background-color: #373737;
+  border: 1px solid #ccc;
+  padding: 10px;
+  border-radius: 10px;
+  height: 75vh;
+  width: 30vw;
+  max-width: 30vw;
+  overflow-y: auto;
+}
+
+.log-content ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.log-content li {
+  margin: 10px 0;
+  color: rgb(255, 255, 255);
+  font-size: 16px;
+  word-wrap: break-word;
+}
+
+.message-form {
+  display: flex;
+  margin-top: 10px;
+  align-items: center;
+}
+
+.message-form input {
+  flex: 1;
+  padding: 10px;
+}
+
+.message-form button {
+  background-color: #007BFF;
+  color: #fff;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 10px;
+  cursor: pointer;
+  margin-left: 10px;
+}
+
+.username {
+  font-weight: bold;
+}
+
+
+
+
+/* CSS for Layout Positioning */
+.container {
+  display: flex;
+}
+.game-container {
+  flex: 1; /* Takes up 1/3 of the available space */
+  padding: 20px;
+  width: 30vw;
+}
+
+.header-container {
+  flex: 1; /* Takes up 1/3 of the available space */
+  padding: 20px;
+  width: 30vw;
+}
+
+.char-container {
+  display: flex;
+  justify-content: space-between; /* Spread items horizontally */
+  align-items: center;
+  list-style: none; /* Remove default list styles */
+}
+
+.char-card-alive {
+  background-color: #1e3e16;
+  padding: 10px;
+  margin: 5px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+  color: white;
+  width: 100px;
+}
+
+.char-card-dead {
+  background-color: #630101;
+  padding: 10px;
+  margin: 5px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+  color: white;
+  width: 100px;
+  text-decoration: line-through;
+}
+
+.char-card-dead:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  background-color: #d83d3d;
+}
+
+/* Hover effect */
+.char-card-alive:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  background-color: #287c3d;
+}
+
+
