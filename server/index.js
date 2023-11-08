@@ -48,14 +48,15 @@ deck = shuffle(deck)
 console.log(deck)
 
 let aliveCount = 0
-
-//NEED TO RESET passCount and queuedPlayerAction
-// playerid, action made, receipient player
-let queuedPlayerAction = {id: '', action: '', player: ''}
 let passCount = 0
 let currTurnID = ''
 let turnOrder = []
 let turn = 0
+
+let blockedID = ''
+let vicID = ''
+let doubleKill = false
+
 
 
 io.on('connection', (socket) => {
@@ -94,10 +95,17 @@ io.on('connection', (socket) => {
         aliveCount = usersAlive()
     })
 
-    socket.on('discardChar', (char, challengedChar, challengerID) => {
+    socket.on('block', (blockingChar, blockerID) => {
+        //emit to everyone to open the blockchallengemenu
+        //reset the pass count because there's going to be another vote
+        passCount = 0
+        socket.broadcast.emit('blockChallengeMenu', blockingChar, blockerID, getUsername(blockerID))
+    })
+
+    socket.on('discardChar', (char, challengedChar, challengerID, isThisABlock) => {
         // if the user picks the RIGHT character
         if (char === challengedChar) {
-            io.to(challengerID).emit('loseCard', '', '')
+            io.to(challengerID).emit('loseCard', '', '', false)
             //make the challenger lose a card
             //give the user a new card
             let newTurnOrder = turnOrder.map((obj) => {
@@ -110,12 +118,17 @@ io.on('connection', (socket) => {
                             deck.push(temp)
                             // run the action that the user was supposed to get
                             if (challengedChar === 'duke') {
-                                tax(id, false)
+                                if (!isThisABlock) {
+                                    tax(id, false)
+                                }
                             }
                             else if (challengedChar === 'ambassador') {
-                                exchange(id)
+                                exchange(id, false)
                             }
-
+                            else if (challengedChar === 'assassin') {
+                                doubleKill = true
+                                assassinate(id, vicID, false)
+                            }
 
 
 
@@ -128,6 +141,7 @@ io.on('connection', (socket) => {
                 }
                 return obj
             })
+            turnOrder = newTurnOrder
         }
         // if the user picks the WRONG character
         else {
@@ -145,24 +159,48 @@ io.on('connection', (socket) => {
                 return obj
             })
             turnOrder = newTurnOrder
-            turn += 1
-            currTurnID = turnOrder[turn % (turnOrder.length)].id
-            io.sockets.emit('currTurn', currTurnID, getUsername(currTurnID))
-            io.sockets.emit('getTurn', turn)
+            
+            // if an action was attempted to be blocked but WRONGED, make sure teh action still goes through
+            if (isThisABlock) {
+                // making sure FOREIGN AID still goes through
+                if (challengedChar === 'duke') {
+                    let newTurnOrder = turnOrder.map((obj) => {
+                        if (obj.id === blockedID) {
+                            obj.coins += 2
+                        }
+                        return obj
+                    })
+                    turnOrder = newTurnOrder
+                }
+            }
+            turnOrder = newTurnOrder
+
+            incrementTurn()
+
             io.sockets.emit('receiveTurnOrder', turnOrder)
+
         }
 
     })
 
-    socket.on('challenge', (challengerID, personBeingChallengedID, prompt) => {
+    socket.on('challenge', (challengerID, personBeingChallengedID, prompt, victimID) => {
         io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(challengerID)} has challenged the ${prompt} from ${getUsername(personBeingChallengedID)}!`})
         //close the challengeMenu's for everyone
+        //IMPLEMENT THIS LATER ^^^^^^^^^^^
         if (prompt === 'TAX') {
-            io.to(personBeingChallengedID).emit('loseCard', 'duke', challengerID)
+            io.to(personBeingChallengedID).emit('loseCard', 'duke', challengerID, false)
         }
-        if (prompt === 'EXCHANGE') {
-            io.to(personBeingChallengedID).emit('loseCard', 'ambassador', challengerID)
+        else if (prompt === 'EXCHANGE') {
+            io.to(personBeingChallengedID).emit('loseCard', 'ambassador', challengerID, false)
         }
+        else if (prompt === 'duke') {
+            io.to(personBeingChallengedID).emit('loseCard', 'duke', challengerID, true)
+        }
+        else if (prompt === 'ASSASSINATE') {
+            io.to(personBeingChallengedID).emit('loseCard', 'assassin', challengerID, false)
+            vicID = victimID
+        }
+        
 
 
 
@@ -172,7 +210,7 @@ io.on('connection', (socket) => {
 
     })
 
-    socket.on('pass', (requestorID, prompt) => {
+    socket.on('pass', (requestorID, prompt, victimID) => {
         console.log('passed')
         passCount += 1
         if (passCount === (usersAlive() - 1)) {
@@ -180,7 +218,20 @@ io.on('connection', (socket) => {
                 tax(requestorID, true)
             }
             else if (prompt === 'EXCHANGE') {
-                exchange(requestorID)
+                exchange(requestorID, true)
+            }
+            else if (prompt === 'FOREIGN AID') {
+                foreignAid(requestorID, true)
+            }
+            else if (prompt === 'duke') {
+                io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(requestorID)}'s FOREIGN AID has been blocked`})
+                incrementTurn()
+            }
+            else if (prompt === 'ASSASSINATE') {
+                assassinate(requestorID, victimID, true)
+            }
+            else if (prompt === 'STEAL') {
+                steal(requestorID, victimID, true)
             }
 
 
@@ -194,9 +245,8 @@ io.on('connection', (socket) => {
     })
 
     //ACTION REQUESTS
-    socket.on('actionRequest', (player, action) => {
+    socket.on('actionRequest', (player, action, char) => {
         // reset variables to prep for an action vote
-        // queuedPlayerAction = {id: id, action: action, player: player}
         passCount = 0
 
         if (action === 'Income') {
@@ -209,6 +259,23 @@ io.on('connection', (socket) => {
         else if (action === 'Exchange') {
             io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(id)} is attempting to EXCHANGE`})
             socket.broadcast.emit('exchangeRequest', getUsername(id), id)
+        }
+        else if (action === 'Foreign Aid') {
+            blockedID = id
+            io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(id)} is attempting to FOREIGN AID`})
+            socket.broadcast.emit('foreignAidRequest', getUsername(id), id)
+        }
+        else if (action === 'Coup') {
+            coup(id, player, char)
+        }
+        else if (action === 'Assassinate') {
+            io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(id)} is attempting to ASSASSINATE ${getUsername(player)}`})
+            socket.broadcast.emit('assassinateRequest', getUsername(id), id, getUsername(player), player)
+        }
+        else if (action === 'Steal') {
+            io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(id)} is attempting to STEAL from ${getUsername(player)}`})
+            socket.broadcast.emit('stealRequest', getUsername(id), id, getUsername(player), player)
+
         }
 
 
@@ -281,6 +348,7 @@ io.on('connection', (socket) => {
         
     }
 
+    // HANDLES ALL ACTIONS WHEN SUCCESSFULLY ACTED UPON (except exchange, exchange will send a new menu to the user to pick)
     function tax(requestorID, endTurn) {
         let newTurnOrder = turnOrder.map((obj) => {
             if (obj.id === requestorID) {
@@ -296,17 +364,144 @@ io.on('connection', (socket) => {
         io.sockets.emit('receiveTurnOrder', turnOrder)
         
         // check if you want the turn to end, or if you are still waiting on someone to discard a card
+        // because discarding the card will increment the turn, else turn will increment twice
         if (endTurn) {
-            turn += 1
-            currTurnID = turnOrder[turn % (turnOrder.length)].id
-            io.sockets.emit('currTurn', currTurnID, getUsername(currTurnID))
-            io.sockets.emit('getTurn', turn)
+            incrementTurn()
         }
     }
 
     function exchange(requestorID, endTurn) {
-        
+        io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(requestorID)} used EXCHANGE`})
+        deck = shuffle(deck)
+        io.to(requestorID).emit('openExchangeMenu', deck.pop(), deck.pop(), endTurn)
     }
+
+    function foreignAid(requestorID, endTurn) {
+        let newTurnOrder = turnOrder.map((obj) => {
+            if (obj.id === requestorID) {
+                obj.coins += 2
+                io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(requestorID)} used FOREIGN AID`})
+            }
+            return obj
+        })
+
+        //send new turnOrder data to everyone
+        turnOrder = newTurnOrder
+        io.sockets.emit('receiveTurnOrder', turnOrder)
+        // check if you want the turn to end, or if you are still waiting on someone to discard a card
+        // because discarding the card will increment the turn, else turn will increment twice
+        if (endTurn) {
+           incrementTurn()
+        }
+    }
+
+    function coup(couperID, coupeeID, char) {
+        // make the couper lose 7 coins
+        let newTurnOrder = turnOrder.map((obj) => {
+            if (obj.id === couperID) {
+                obj.coins -= 7
+                io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(couperID)} has launched a COUP at ${getUsername(coupeeID)}`})
+            }
+            return obj
+        })
+        turnOrder = newTurnOrder
+        // make the coupee lose a card if guessed right
+        newTurnOrder = turnOrder.map((obj) => {
+            if (obj.id === coupeeID) {
+                if (obj.cards[0].alive && obj.cards[0].char === char) {
+                    io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(couperID)} successfully COUPed ${getUsername(coupeeID)} for ${char}`})
+                    obj.cards[0].alive = false
+                }
+                else if (obj.cards[1].alive && obj.cards[1].char === char) {
+                    io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(couperID)} successfully COUPed ${getUsername(coupeeID)} for ${char}`})
+                    obj.cards[1].alive = false
+                }
+                else {
+                    io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(couperID)} missed their COUP on ${getUsername(coupeeID)} for ${char}`})
+                }
+            }
+            return obj
+        })
+        //send new turnOrder data to everyone
+        turnOrder = newTurnOrder
+        io.sockets.emit('receiveTurnOrder', turnOrder)
+
+        incrementTurn()
+
+    }
+
+    function assassinate(requestorID, victimID, endTurn) {
+        //lose 3 coins
+        let newTurnOrder = turnOrder.map((obj) => {
+            if (obj.id === requestorID) {
+                obj.coins -= 3
+                io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(requestorID)} ASSASSINATED ${getUsername(victimID)}`})
+            }
+            return obj
+        })
+        turnOrder = newTurnOrder
+        io.sockets.emit('receiveTurnOrder', turnOrder)
+        io.to(victimID).emit('loseCard', '', '', false)
+    }
+
+    function steal(requestorID, victimID, endTurn) {
+        //lose 2 coins for victim
+        let newTurnOrder = turnOrder.map((obj) => {
+            if (obj.id === victimID) {
+                obj.coins -= 2
+                io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(requestorID)} used STEAL on ${getUsername(victimID)}`})
+            }
+            return obj
+        })
+        turnOrder = newTurnOrder
+        // gain 2 coins for requestor
+        newTurnOrder = turnOrder.map((obj) => {
+            if (obj.id === requestorID) {
+                obj.coins += 2
+            }
+            return obj
+        })
+        turnOrder = newTurnOrder
+        io.sockets.emit('receiveTurnOrder', turnOrder)
+        incrementTurn()
+    }
+
+    // just a function that will end the turn
+    function incrementTurn() {
+        turn += 1
+        currTurnID = turnOrder[turn % (turnOrder.length)].id
+        io.sockets.emit('currTurn', currTurnID, getUsername(currTurnID))
+        io.sockets.emit('getTurn', turn)
+    }
+
+    socket.on('exchangedCards', (chosenCards, unchosenCards, requestorID, endTurn) => {
+        //add unchosen cards back to the deck
+        deck.push(unchosenCards[0], unchosenCards[1])
+        //set chosen cards as the new cards for the user
+        let newTurnOrder = turnOrder.map((obj) => {
+            if (obj.id === requestorID) {
+                let i = 0
+                for (let card of obj.cards) {
+                    if (card.alive) {
+                        card.char = chosenCards[i]
+                        i += 1
+                    }
+                }
+                io.sockets.emit('receiveChat', {username: 'server', text: `${getUsername(requestorID)} has finally finished exchanging`})
+
+            }
+            return obj
+        })
+
+        //send new turnOrder data to everyone
+        turnOrder = newTurnOrder
+        io.sockets.emit('receiveTurnOrder', turnOrder)
+
+        //check if you want to end the turn or if youre still waiting on someone to discard a card
+        if (endTurn) {
+            incrementTurn()
+        }
+    })
 })
 
 server.listen(port, ()=> console.log(`server on port ${port}`))

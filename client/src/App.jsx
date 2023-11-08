@@ -3,7 +3,9 @@ import './App.css'
 import ActionMenu from './components/ActionMenu'
 import LoseCardMenu from './components/LoseCardMenu'
 import ChallengeMenu from './components/ChallengeMenu'
+import BlockChallengeMenu from './components/BlockChallengeMenu'
 import io from 'socket.io-client'
+import ExchangeMenu from './components/ExchangeMenu'
 const socket = io.connect('http://localhost:3001')
 
 function App() {
@@ -15,49 +17,74 @@ function App() {
   //{username: 'Rojo', cards: [{char: 'captain', alive: true}, {char: 'duke', alive: false}], id: '47239487234'}
   const [turn, setTurn] = useState(0)
   const [challengePrompt, setChallengePrompt] = useState(['', ''])
+  // playerName, playerID, action/char
   const [showLoseCardMenu, setShowLoseCardMenu] = useState(false)
   const [showChallengeMenu, setShowChallengeMenu] = useState(false)
   const [showActionMenu, setShowActionMenu] = useState(false)
+  const [showExchangeMenu, setShowExchangeMenu] = useState(false)
+  const [showBlockChallengeMenu, setShowBlockChallengeMenu] = useState(false)
+  const [blockPrompt, setBlockPrompt] = useState(['', '', ''])
+  //blockingChar, blockerID, blockerName
+  const [exchangeChars, setExchangeChars] = useState(['', ''])
+  const [exchangeEndTurn, setExchangeEndTurn] = useState(true)
   const [currTurnID, setCurrTurnID] = useState('')
   const [currTurnName, setCurrTurnName] = useState('')
   const [challengedChar, setChallengedChar] = useState('')
   const [challengerID, setChallengerID] = useState('')
+  const [isThisABlock, setIsThisABlock] = useState(false)
 
-  const selectAction = (player, action) => {
-    console.log('Action Selected')
-    console.log(player)
-    console.log(action)
-    socket.emit('actionRequest', player, action)
+
+  const selectAction = (player, action, char) => {
+    console.log(`Action selected: ${player}, ${action}`)
+    socket.emit('actionRequest', player, action, char)
   }
 
-  const challenge = () => {
+  const challenge = (victimID) => {
     // person challenging, person being challenged, prompt
-    socket.emit('challenge', userID, challengePrompt[1], challengePrompt[2])
+    socket.emit('challenge', userID, challengePrompt[1], challengePrompt[2], victimID)
   }
 
-  const pass = () => {
-    socket.emit('pass', challengePrompt[1], challengePrompt[2])
+  const pass = (victimID) => {
+    socket.emit('pass', challengePrompt[1], challengePrompt[2], victimID)
   }
 
   const discardChar = (char) => {
     //character chosen, the challenged character, person who challenged
-    socket.emit('discardChar', char, challengedChar, challengerID)
+    socket.emit('discardChar', char, challengedChar, challengerID, isThisABlock)
   }
 
+  const chosenCards = (chars, unchosenChars) => {
+    console.log(`chosen chars: ${chars}`)
+    console.log(`unchosen chars: ${unchosenChars}`)
+    socket.emit('exchangedCards', chars, unchosenChars, userID, exchangeEndTurn)
+  }
+
+  const block = (blockingChar) => {
+    socket.emit('block', blockingChar, userID)
+  }
+
+  // CLOSE MENU FUNCTIONS
   //close the action menu
   const closeActionMenu = () => {
     setShowActionMenu(false)
   }
-
   //Close the challenge menu
   const closeChallengeMenu = () => {
     setShowChallengeMenu(false)
   }
-
   //close the lose card menu
   const closeLoseCardMenu = () => {
     setShowLoseCardMenu(false)
   }
+  // close the exchange menu
+  const closeExchangeMenu = () => {
+    setShowExchangeMenu(false)
+  }
+  // close block challenge menu
+  const closeBlockChallengeMenu = () => {
+    setShowBlockChallengeMenu(false)
+  }
+
 
   //show deck command
   const showdeck = () => {
@@ -113,6 +140,9 @@ function App() {
       if (currTurnID === userID) {
         setShowActionMenu(true)
       }
+      else {
+        setShowActionMenu(false)
+      }
     })
   }, [currTurnID, userID, socket])
 
@@ -131,12 +161,25 @@ function App() {
       setTurn(data)
       // setCurrentUsersTurn(turnOrder[data % (turnOrder.length)])
     })
-    socket.on('loseCard', (challengedChar, challengerID) => {
+    socket.on('loseCard', (challengedChar, challengerID, isThisABlock) => {
       // sets challengedchar in state variable to match later
+      setIsThisABlock(isThisABlock)
       setChallengedChar(challengedChar)
       setChallengerID(challengerID)
       console.log('loseCard received')
       setShowLoseCardMenu(true)
+    })
+    //SPECIAL EXCHANGE MENU
+    socket.on('openExchangeMenu', (char1, char2, endTurn) => {
+      setShowExchangeMenu(true)
+      setExchangeEndTurn(endTurn)
+      setExchangeChars([char1, char2])
+    })
+    
+    //blockChallengeMenu open
+    socket.on('blockChallengeMenu', (blockingChar, blockerID, blockerName) => {
+      setChallengePrompt([blockerName, blockerID, blockingChar])
+      setShowBlockChallengeMenu(true)
     })
 
     //REQUESTS FOR ACTIONS
@@ -149,6 +192,23 @@ function App() {
       setChallengePrompt([requestor, requestorID, 'EXCHANGE'])
       setShowChallengeMenu(true)
     })
+    socket.on('foreignAidRequest', (requestor, requestorID) => {
+      setChallengePrompt([requestor, requestorID, 'FOREIGN AID'])
+      setShowChallengeMenu(true)
+    })
+    socket.on('assassinateRequest', (requestor, requestorID, victim, victimID) => {
+      setChallengePrompt([requestor, requestorID, 'ASSASSINATE', victim, victimID])
+      setShowChallengeMenu(true)
+    })
+    socket.on('stealRequest', (requestor, requestorID, victim, victimID) => {
+      setChallengePrompt([requestor, requestorID, 'STEAL', victim, victimID])
+      setShowChallengeMenu(true)
+    })
+
+
+
+
+
 
 
 
@@ -227,11 +287,33 @@ function App() {
 
         {showChallengeMenu ? 
           <ChallengeMenu 
+            userID={userID}
             challengePrompt={challengePrompt}
-            challenge={challenge}
-            pass={pass}
+            challenge={(victimID) => {
+              challenge(victimID)
+            }}
+            pass={(victimID) => {
+              pass(victimID)
+            }}
             closeChallengeMenu={closeChallengeMenu}
+            block={(blockingChar) => {
+              block(blockingChar)
+            }}
             /> : ''
+        }
+
+        {showBlockChallengeMenu ? <BlockChallengeMenu 
+          //pass down block (challenge) prompt
+          challengePrompt={challengePrompt}
+          // pass down pass button handler
+          pass={pass}
+          // pass down challenge button handler
+          challenge={challenge}
+          //pass down close menu handler
+          closeBlockChallengeMenu={closeBlockChallengeMenu}
+          // pass down ID of player
+          userID={userID}
+        /> : ''
         }
 
         {showLoseCardMenu ? 
@@ -247,6 +329,22 @@ function App() {
           /> : ''
         }
 
+        {showExchangeMenu ?
+        <ExchangeMenu 
+          // 2 cards grabbed from the deck
+          exchangeChars={exchangeChars} 
+          // turn order to find the user's current cards
+          turnOrder={turnOrder} 
+          // user id to find the user's current cards
+          userID={userID}
+          // allow exchange menu to close itself
+          closeExchangeMenu={closeExchangeMenu}
+          // retrieve the cards chosen
+          chosenCards={(chars, unchosenChars) => {chosenCards(chars, unchosenChars)}}
+          />
+        : ''
+        }
+
         {showActionMenu ? 
         <ActionMenu 
           //allow action menu to close itself when picked action
@@ -256,7 +354,7 @@ function App() {
           // pass down the user ID to allow menu to NOT show itself as an option to STEAL, KILL, ETC
           userID={userID}
           // passing down function to allow user to pass up data selected in the menus
-          selectAction={(player, action) => {selectAction(player, action)}}/> 
+          selectAction={(player, action, char) => {selectAction(player, action, char)}}/> 
           : '' 
         }
       </div>

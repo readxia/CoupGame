@@ -19,24 +19,35 @@ function ActionMenu(props) {
             <hr />
             <h2>Action Menu</h2>
             <h6>It's your turn!</h6>
+
             <button onClick={() => {
-                props.selectAction('', 'Income')
+                props.selectAction('', 'Income', '')
                 // clsoe itself
                 props.closeActionMenu()
                 }}>Income</button>
+
             <button onClick={() => {
-                props.selectAction('', 'Foreign Aid')
+                props.selectAction('', 'Foreign Aid', '')
                 //close itself
                 props.closeActionMenu()
                 }}>Foreign Aid</button>
+
+            <button onClick={(e) => {
+                setAction(e.target.textContent)
+                showMenu()
+                }}>Coup</button>
+                
             <button onClick={() => {
-                props.selectAction('', 'Tax')
+                props.selectAction('', 'Tax', '')
                 props.closeActionMenu()
                 }}>Tax</button>
+
             <button onClick={() => {
-                props.selectAction('', 'Exchange')
+                props.selectAction('', 'Exchange', '')
                 props.closeActionMenu()
                 }}>Exchange</button>
+            
+
             <button onClick={(e) => {
                 setAction(e.target.textContent)
                 showMenu()
@@ -44,11 +55,18 @@ function ActionMenu(props) {
                 Assassinate
             </button>
 
+            <button onClick={(e) => {
+                setAction(e.target.textContent)
+                showMenu()
+            }}>
+                Steal
+            </button>
+
             {showChoosePlayerMenu && (
                 <ChoosePlayerMenu 
                     // passes down the selectAction function to send back above
-                    selectAction={(player, action) => {
-                        props.selectAction(player, action)
+                    selectAction={(player, action, char) => {
+                        props.selectAction(player, action, char)
                     }} 
                     // gives the turn order passed above (basically the player list)
                     turnOrder={props.turnOrder} 
@@ -58,6 +76,10 @@ function ActionMenu(props) {
                     action={action}
                     // passing down user id to have the user self NOT show up as an option to KILL STEAL ETC
                     userID={props.userID}
+                    // allow to close the ACTION menu
+                    closeActionMenu={() => {
+                        props.closeActionMenu()
+                    }}
                     
                     />
             )}
